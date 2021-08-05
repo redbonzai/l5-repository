@@ -446,7 +446,7 @@ $this->repository->deleteWhere([
 #### Using the command
 
 ```terminal
-php artisan make:criteria My
+php artisan make:criteria MyCriteria
 ```
 
 Criteria are a way to change the repository of the query by applying specific conditions according to your needs. You can add multiple Criteria in your repository.
@@ -760,12 +760,116 @@ ORDER BY posts.title
 ...
 ```
 
+`http://prettus.local/users?orderBy=posts:custom_id,other_id|posts.title&sortedBy=desc`
+
+Query will have something like this
+
+```sql
+...
+INNER JOIN posts ON users.custom_id = posts.other_id
+...
+ORDER BY posts.title
+...
+```
+
+Sorting multiple columns same sortedBy
+
+`http://prettus.local/users?orderBy=name;created_at&sortedBy=desc`
+
+Result will have something like this
+
+```json
+   [
+       {
+           "id": 1,
+           "name": "Laravel",
+           "created_at": "-0001-11-29 00:00:00"
+       },
+       {
+           "id": 3,
+           "name": "Laravel",
+           "created_at": "-0001-11-28 00:00:00"
+       },
+       {
+           "id": 2,
+           "name": "John Doe",
+           "created_at": "-0001-11-30 00:00:00"
+       }
+   ]
+```
+
+
+Sorting multiple columns difference sortedBy
+
+`http://prettus.local/users?orderBy=name;created_at&sortedBy=desc;asc`
+
+Result will have something like this
+
+```json
+   [
+       {
+           "id": 3,
+           "name": "Laravel",
+           "created_at": "-0001-11-28 00:00:00"
+       },
+       {
+           "id": 1,
+           "name": "Laravel",
+           "created_at": "-0001-11-29 00:00:00"
+       },
+       {
+           "id": 2,
+           "name": "John Doe",
+           "created_at": "-0001-11-30 00:00:00"
+       }
+   ]
+```
 
 Add relationship
 
 `http://prettus.local/users?with=groups`
 
+Between filter
 
+`http://prettus.local/product?search=price:100,500&searchFields=price:between`
+
+Result will have something like this
+
+```json
+   [
+       {
+           "id": 3,
+           "price": "150",
+           "created_at": "-0001-11-28 00:00:00"
+       },
+       {
+           "id": 1,
+           "price": "300",
+           "created_at": "-0001-11-29 00:00:00"
+       },
+       {
+           "id": 2,
+           "price": "450",
+           "created_at": "-0001-11-30 00:00:00"
+       }
+   ]
+```
+
+WhereIn filter 
+
+`http://prettus.local/product?search=price:300,500&searchFields=price:in`
+
+Result will have something like this
+
+```json
+   [
+       {
+           "id": 1,
+           "price": "300",
+           "created_at": "-0001-11-29 00:00:00"
+       }
+   ]
+```
 
 #### Overwrite params name
 

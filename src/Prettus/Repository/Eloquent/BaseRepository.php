@@ -14,8 +14,11 @@ use Prettus\Repository\Contracts\PresenterInterface;
 use Prettus\Repository\Contracts\RepositoryCriteriaInterface;
 use Prettus\Repository\Contracts\RepositoryInterface;
 use Prettus\Repository\Events\RepositoryEntityCreated;
+use Prettus\Repository\Events\RepositoryEntityCreating;
 use Prettus\Repository\Events\RepositoryEntityDeleted;
+use Prettus\Repository\Events\RepositoryEntityDeleting;
 use Prettus\Repository\Events\RepositoryEntityUpdated;
+use Prettus\Repository\Events\RepositoryEntityUpdating;
 use Prettus\Repository\Exceptions\RepositoryException;
 use Prettus\Repository\Traits\ComparesVersionsTrait;
 use Prettus\Validator\Contracts\ValidatorInterface;
@@ -103,6 +106,16 @@ abstract class BaseRepository implements RepositoryInterface, RepositoryCriteria
     public function boot()
     {
         //
+    }
+
+    /**
+     * Returns the current Model instance
+     *
+     * @return Model
+     */
+    public function getModel()
+    {
+        return $this->model;
     }
 
     /**
@@ -437,20 +450,19 @@ abstract class BaseRepository implements RepositoryInterface, RepositoryCriteria
     }
 
     /**
-     * Set the "limit" value of the query.
+     * Retrieve data of repository with limit applied
      *
-     * @param  int  $value
+     * @param int $limit
+     * @param array $columns
+     *
      * @return mixed
      */
-    public function limit($limit)
+    public function limit($limit, $columns = ['*'])
     {
-        $this->applyCriteria();
-        $this->applyScope();
-        $results = $this->model->limit($limit);
+        // Shortcut to all with `limit` applied on query via `take`
+        $this->take($limit);
 
-        $this->resetModel();
-
-        return $this->parserResult($results);
+        return $this->all($columns);
     }
 
     /**
@@ -628,6 +640,8 @@ abstract class BaseRepository implements RepositoryInterface, RepositoryCriteria
             $this->validator->with($attributes)->passesOrFail(ValidatorInterface::RULE_CREATE);
         }
 
+        event(new RepositoryEntityCreating($this, $attributes));
+
         $model = $this->model->newInstance($attributes);
         $model->save();
         $this->resetModel();
@@ -655,10 +669,13 @@ abstract class BaseRepository implements RepositoryInterface, RepositoryCriteria
             // we should pass data that has been casts by the model
             // to make sure data type are same because validator may need to use
             // this data to compare with data that fetch from database.
+            $model = $this->model->newInstance();
+            $model->setRawAttributes([]);
+            $model->setAppends([]);
             if ($this->versionCompare($this->app->version(), "5.2.*", ">")) {
-                $attributes = $this->model->newInstance()->forceFill($attributes)->makeVisible($this->model->getHidden())->toArray();
+                $attributes = $model->forceFill($attributes)->makeVisible($this->model->getHidden())->toArray();
             } else {
-                $model = $this->model->newInstance()->forceFill($attributes);
+                $model->forceFill($attributes);
                 $model->makeVisible($this->model->getHidden());
                 $attributes = $model->toArray();
             }
@@ -671,6 +688,9 @@ abstract class BaseRepository implements RepositoryInterface, RepositoryCriteria
         $this->skipPresenter(true);
 
         $model = $this->model->findOrFail($id);
+
+        event(new RepositoryEntityUpdating($this, $model));
+
         $model->fill($attributes);
         $model->save();
 
@@ -704,6 +724,8 @@ abstract class BaseRepository implements RepositoryInterface, RepositoryCriteria
 
         $this->skipPresenter(true);
 
+        event(new RepositoryEntityCreating($this, $attributes));
+
         $model = $this->model->updateOrCreate($attributes, $values);
 
         $this->skipPresenter($temporarySkipPresenter);
@@ -734,6 +756,8 @@ abstract class BaseRepository implements RepositoryInterface, RepositoryCriteria
         $this->skipPresenter($temporarySkipPresenter);
         $this->resetModel();
 
+        event(new RepositoryEntityDeleting($this, $model));
+
         $deleted = $model->delete();
 
         event(new RepositoryEntityDeleted($this, $originalModel));
@@ -756,6 +780,8 @@ abstract class BaseRepository implements RepositoryInterface, RepositoryCriteria
         $this->skipPresenter(true);
 
         $this->applyConditions($where);
+
+        event(new RepositoryEntityDeleting($this, $this->model->getModel()));
 
         $deleted = $this->model->delete();
 
@@ -836,9 +862,32 @@ abstract class BaseRepository implements RepositoryInterface, RepositoryCriteria
         return $this;
     }
 
+    /**
+     * Set the "orderBy" value of the query.
+     *
+     * @param mixed $column
+     * @param string $direction
+     *
+     * @return $this
+     */
     public function orderBy($column, $direction = 'asc')
     {
         $this->model = $this->model->orderBy($column, $direction);
+
+        return $this;
+    }
+
+    /**
+     * Set the "limit" value of the query.
+     *
+     * @param int $limit
+     *
+     * @return $this
+     */
+    public function take($limit)
+    {
+        // Internally `take` is an alias to `limit`
+        $this->model = $this->model->limit($limit);
 
         return $this;
     }
